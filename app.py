@@ -7,7 +7,7 @@ app = Flask(__name__)
 
 TELEGRAM_TOKEN = "여기에_새_토큰_입력"
 TELEGRAM_CHAT_ID = "여기에_채팅ID_입력"
-SHEETS_URL = "https://script.google.com/macros/s/AKfycbyAARmIZWNQ54WSRNWGe8rlR-45h1dd9wapo1NpyHHTc4vML_EcJTXmq40PIT4Rtygh/exec"
+SHEETS_URL = "https://script.google.com/macros/s/AKfycbyl6N2sRe9HNkwo9-0KX39iSoH9iqGh-hS64KwSc-trE4GF5zHPrqJbneGdZIzwZlBJ/exec"
 CHECK_INTERVAL = 1800
 SEEN_FILE = "seen_listings.json"
 NAEBANG_LAT = 37.4969
