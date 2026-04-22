@@ -13,7 +13,6 @@ CHECK_INTERVAL = 1800
 SEEN_FILE = "seen_listings.json"
 
 SEARCH_URL = "https://jeonse.lh.or.kr/jw/rs/search/reSearchRthousList.do"
-DETAIL_URL = "https://jeonse.lh.or.kr/jw/rs/search/selectRthousDetail.do"
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36",
@@ -33,12 +32,12 @@ PARAMS = {
     "rthousDelngSttus": "9",
     "rthousRoomCo": "-1",
     "rthousToiletCo": "-1",
-    "rthousGtnFrom": "10000",   # 보증금 1억 이상
-    "rthousGtnTo": "16000",     # 보증금 1.6억 이하
+    "rthousGtnFrom": "10000",
+    "rthousGtnTo": "16000",
     "rthousMthtFrom": "0",
-    "rthousMthtTo": "35",       # 월세 35만 이하
-    "rthousHpprFrom": "33",     # 공급면적 최소 33㎡
-    "rthousHpprTo": "84",       # 공급면적 최대 84㎡
+    "rthousMthtTo": "35",
+    "rthousHpprFrom": "33",
+    "rthousHpprTo": "84",
     "confmdeFrom": "1900",
     "confmdeTo": "2029",
     "northEast": "(38.3, 127.9)",
@@ -51,6 +50,14 @@ FILTER = {
     "max_area": 84,
     "exclude_basement": True,
 }
+
+def safe_float(val):
+    try:
+        s = str(val).strip()
+        m = re.search(r'\d+\.?\d*', s)
+        return float(m.group()) if m else 0.0
+    except:
+        return 0.0
 
 def send_telegram(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
@@ -91,13 +98,12 @@ def fetch_listings():
     return all_listings
 
 def parse_item(item):
-    # 실제 필드명 기반
-    area = float(item.get("rthousExclAr", 0) or 0)       # 전용면적
-    supply_area = float(item.get("rthousHppr", 0) or 0)   # 공급면적
-    floor = item.get("rthousFloor", "-")                    # 층수 (-1=지하)
-    deposit = float(item.get("rthousGtn", 0) or 0)         # 보증금(만원)
-    monthly = float(item.get("rthousMtht", 0) or 0)        # 월세(만원)
-    rent_type = item.get("rthousRentStle", "")              # 1=전세 2=월세 3=반전세
+    area = safe_float(item.get("rthousExclAr", 0))
+    supply_area = safe_float(item.get("rthousHppr", 0))
+    floor = item.get("rthousFloor", "-")
+    deposit = safe_float(item.get("rthousGtn", 0))
+    monthly = safe_float(item.get("rthousMtht", 0))
+    rent_type = item.get("rthousRentStle", "")
     name = item.get("rthousNm", "")
     rtid = item.get("rthousId", "")
     reg_date = item.get("rthousRgsde", "")
@@ -111,7 +117,6 @@ def parse_item(item):
     else:
         type_str = "월세"
 
-    # 상세 링크
     detail_link = f"https://jeonse.lh.or.kr/jw/rs/search/selectRthousDetail.do?rthousId={rtid}&mi=2873" if rtid else ""
 
     return {
@@ -133,7 +138,6 @@ def matches_filter(listing):
     floor_val = listing.get("floor", "0")
     area = listing.get("area", 0)
 
-    # 지하 제외
     if FILTER["exclude_basement"]:
         try:
             if int(floor_val) < 1:
@@ -142,7 +146,6 @@ def matches_filter(listing):
             if any(k in str(floor_val) for k in ["지하", "B", "-"]):
                 return False
 
-    # 면적
     if area and not (FILTER["min_area"] <= area <= FILTER["max_area"]):
         return False
 
@@ -212,11 +215,11 @@ def save_seen(seen):
 def main():
     print("=" * 40)
     print("LH 전세임대뱅크 알림봇")
-    print("보증금 1억~1.6억 / 월35만이하 / 33~84㎡")
+    print("보증금 1억~1.6억 / 월35만이하 / 33~84")
     print(f"체크: {CHECK_INTERVAL//60}분마다")
     print("=" * 40)
 
-    send_telegram("✅ LH 전세임대뱅크 알림봇 시작\n보증금 1억~1.6억 / 월35만이하\n면적 33~84㎡ / 서초·강남 우선\n상세보기 링크 포함")
+    send_telegram("LH 전세임대뱅크 알림봇 시작\n보증금 1억~1.6억 / 월35만이하\n면적 33~84 / 서초강남 우선\n상세보기 링크 포함")
 
     seen = load_seen()
 
@@ -226,12 +229,16 @@ def main():
         matched = []
 
         for raw in raw_listings:
-            listing = parse_item(raw)
-            lid = listing["id"]
-            if lid not in seen and matches_filter(listing):
-                score = get_priority(listing)
-                matched.append((score, lid, listing))
-                seen.add(lid)
+            try:
+                listing = parse_item(raw)
+                lid = listing["id"]
+                if lid not in seen and matches_filter(listing):
+                    score = get_priority(listing)
+                    matched.append((score, lid, listing))
+                    seen.add(lid)
+            except Exception as e:
+                print(f"  파싱 오류: {e}")
+                continue
 
         matched.sort(key=lambda x: x[0], reverse=True)
         for score, lid, listing in matched:
