@@ -120,6 +120,31 @@ def fetch_detail(rtid):
         return result
     except: return {}
 
+# 우선순위 지역 좌표 (서초/강남/방배/이수/사당/군자)
+PRIORITY_COORDS = [
+    {"name":"서초·강남","northEast":"(37.530, 127.080)","southWest":"(37.460, 126.990)"},
+    {"name":"방배·이수·사당","northEast":"(37.510, 127.010)","southWest":"(37.470, 126.940)"},
+    {"name":"군자·광진","northEast":"(37.570, 127.110)","southWest":"(37.530, 127.060)"},
+]
+
+def fetch_priority_listings():
+    """우선순위 지역 매물만 빠르게 수집"""
+    all_listings = []
+    for coord in PRIORITY_COORDS:
+        try:
+            params = PARAMS.copy()
+            params["northEast"] = coord["northEast"]
+            params["southWest"] = coord["southWest"]
+            params["currPage"] = "1"
+            r = requests.post(SEARCH_URL, data=params, headers=HEADERS, timeout=10)
+            data = r.json()
+            listings = data.get("rthousList", [])
+            all_listings.extend(listings)
+            time.sleep(0.2)
+        except:
+            continue
+    return all_listings
+
 def fetch_all_listings():
     all_listings=[]
     page=1
@@ -185,15 +210,32 @@ def parse_listing(item):
 _cache={"listings":[],"updated":""}
 
 def refresh_cache():
-    raw=fetch_all_listings()
-    parsed=[]
-    for item in raw:
+    # 1단계: 우선순위 지역 먼저 (빠름)
+    priority_raw = fetch_priority_listings()
+    parsed = []
+    seen_ids = set()
+    for item in priority_raw:
         try:
-            p=parse_listing(item)
-            parsed.append(p)
+            p = parse_listing(item)
+            if p["id"] not in seen_ids:
+                seen_ids.add(p["id"])
+                parsed.append(p)
         except: continue
-    _cache["listings"]=parsed
-    _cache["updated"]=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    _cache["listings"] = parsed
+    _cache["updated"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S") + " (우선지역)"
+    _cache["loading"] = False
+
+    # 2단계: 수도권 전체 (백그라운드)
+    all_raw = fetch_all_listings()
+    for item in all_raw:
+        try:
+            p = parse_listing(item)
+            if p["id"] not in seen_ids:
+                seen_ids.add(p["id"])
+                parsed.append(p)
+        except: continue
+    _cache["listings"] = parsed
+    _cache["updated"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S") + " (전체)"
 
 @app.route("/")
 def dashboard():
@@ -585,8 +627,11 @@ loadListings();
 
 @app.route("/api/listings")
 def api_listings():
-    if not _cache["listings"]: refresh_cache()
-    return jsonify({"listings":_cache["listings"],"updated":_cache["updated"]})
+    if not _cache["listings"] and not _cache.get("loading"):
+        _cache["loading"] = True
+        t = threading.Thread(target=refresh_cache, daemon=True)
+        t.start()
+    return jsonify({"listings":_cache["listings"],"updated":_cache["updated"],"loading":_cache.get("loading",False)})
 
 @app.route("/api/detail")
 def api_detail():
@@ -596,8 +641,10 @@ def api_detail():
 
 @app.route("/api/refresh")
 def api_refresh():
-    refresh_cache()
-    return jsonify({"ok":True,"count":len(_cache["listings"])})
+    _cache["loading"] = True
+    t = threading.Thread(target=refresh_cache, daemon=True)
+    t.start()
+    return jsonify({"ok":True,"message":"백그라운드에서 새로고침 중..."})
 
 def bot_loop():
     seen=set()
