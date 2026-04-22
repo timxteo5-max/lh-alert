@@ -5,8 +5,8 @@ from bs4 import BeautifulSoup
 
 app = Flask(__name__)
 
-TELEGRAM_TOKEN = "여기에_새_토큰_입력"
-TELEGRAM_CHAT_ID = "여기에_채팅ID_입력"
+TELEGRAM_TOKEN = "8607870648:AAFSkkTcEv_1Iip9NULXOmOw45rEXb9dLM0"
+TELEGRAM_CHAT_ID = "7786983359"
 SHEETS_URL = "https://script.google.com/macros/s/AKfycbx-KIPy5qrS8pFBgZ1tOq23R439ahs-D9eOfYFDqRtgKGm8KxmBiyGssnTMUH4G0wdi/exec"
 CHECK_INTERVAL = 1800
 SEEN_FILE = "seen_listings.json"
